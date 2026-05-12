@@ -360,27 +360,10 @@ function bindDashboardControls() {
   $("#clients-grid")?.addEventListener("click", async (event) => {
     const action = event.target.closest("[data-api-action]");
     if (!action) return;
-
     const apiId = action.closest("[data-api-id]")?.dataset.apiId;
-    if (!apiId) return;
-
-    if (action.dataset.apiAction === "copy-id") {
-      await copyText(apiId);
-      toast("client_id 已复制");
-      return;
-    }
-
-    if (action.dataset.apiAction === "delete") {
+    if (apiId && action.dataset.apiAction === "delete") {
       await deleteApi(apiId);
     }
-  });
-
-  $("#secret-dialog")?.addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-copy-value]");
-    if (!button) return;
-
-    await copyText(button.dataset.copyValue || "");
-    toast("已复制");
   });
   $("#client-presets")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-preset]");
@@ -558,43 +541,22 @@ async function deleteUser(event) {
 async function renderClients() {
   const { apis } = await request("/apis");
   state.clients = apis;
-
-  $("#clients-grid").innerHTML = apis.map((client) => {
-    const redirectUris = Array.isArray(client.redirectUris) ? client.redirectUris : [];
-    const scopes = Array.isArray(client.scopes) ? client.scopes : [];
-
-    return `
+  $("#clients-grid").innerHTML = apis.map((client) => `
     <article class="item-card" data-api-id="${escapeHtml(client.id)}">
       <div class="item-head">
         <div>
           <div class="item-title">${escapeHtml(client.name)}</div>
-          <div class="meta">应用名称 / Application Name</div>
+          <div class="meta">${escapeHtml(client.id)}</div>
         </div>
         <span class="badge">${escapeHtml(statusLabel(client.status))}</span>
       </div>
-
-      <div class="meta">Client ID</div>
-      <code class="client-id-line">${escapeHtml(client.id)}</code>
-
-      <div class="meta">回调地址 / Redirect URI</div>
-      <div class="redirect-list">
-        ${redirectUris.length
-          ? redirectUris.map((uri) => `<code class="client-uri">${escapeHtml(uri)}</code>`).join("")
-          : `<span class="meta">-</span>`}
-      </div>
-
-      <div class="meta">权限范围 / Scopes</div>
-      <div class="chip-grid">
-        ${scopes.map((scope) => `<span class="chip static"><span>${escapeHtml(scope)}</span></span>`).join("")}
-      </div>
-
+      <div class="chip-grid">${client.scopes.map((scope) => `<span class="chip static"><span>${escapeHtml(scope)}</span></span>`).join("")}</div>
+      <div class="meta">${escapeHtml(client.redirectUris.join(", ") || "-")}</div>
       <div class="card-actions">
-        <button class="ghost" data-api-action="copy-id">复制 client_id</button>
         <button class="danger" data-api-action="delete">删除</button>
       </div>
     </article>
-  `;
-  }).join("") || `<div class="empty-state">${escapeHtml(t("noApis"))}</div>`;
+  `).join("") || `<div class="empty-state">${escapeHtml(t("noApis"))}</div>`;
 }
 
 async function renderAudit() {
@@ -633,7 +595,6 @@ async function createClient(event) {
   event.preventDefault();
   const formElement = event.currentTarget;
   const form = new FormData(formElement);
-
   const result = await request("/apis", {
     method: "POST",
     body: {
@@ -642,18 +603,9 @@ async function createClient(event) {
       scopes: selectedScopes()
     }
   });
-
-  const api = result.api || result.client;
-
   closeDialog("#client-dialog");
   formElement.reset();
-
-  $("#client-id-once").textContent = api.id || "";
-  $("#client-secret").textContent = api.clientSecret || "";
-
-  $("#copy-created-client-id")?.setAttribute("data-copy-value", api.id || "");
-  $("#copy-created-client-secret")?.setAttribute("data-copy-value", api.clientSecret || "");
-
+  $("#client-secret").textContent = result.api.clientSecret;
   $("#secret-dialog").showModal();
   await renderClients();
 }
@@ -762,26 +714,6 @@ function applyClientPreset(name) {
   $$("#client-scopes input").forEach((input) => {
     input.checked = preset.scopes.includes(input.value);
   });
-}
-
-async function copyText(value) {
-  const text = String(value || "");
-  if (!text) return;
-
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  textarea.remove();
 }
 
 async function request(path, options = {}) {

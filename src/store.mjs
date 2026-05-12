@@ -433,13 +433,42 @@ export class AccountStore {
   }
 
   async deleteClient(clientId, actorUserId = null) {
-    const client = this.queryOne(`SELECT * FROM clients WHERE id = ${sql(clientId)}`);
-    if (!client) {
-      throw httpError(404, "api credential not found");
+    const key = String(clientId || "").trim();
+    if (!key) {
+      throw httpError(400, "api credential id or name is required", "api_key_required");
     }
 
-    this.exec(`DELETE FROM clients WHERE id = ${sql(clientId)};`);
-    this.audit(actorUserId, "api.delete", "api", clientId, { name: client.name });
+    let client = this.queryOne(`SELECT * FROM clients WHERE id = ${sql(key)}`);
+
+    if (!client) {
+      const matches = this.query(`
+        SELECT * FROM clients
+        WHERE name = ${sql(key)}
+        ORDER BY created_at DESC
+      `);
+
+      if (matches.length > 1) {
+        throw httpError(409, "api credential name is ambiguous", "api_name_ambiguous", {
+          name: key,
+          count: matches.length
+        });
+      }
+
+      client = matches[0] || null;
+    }
+
+    if (!client) {
+      throw httpError(404, "api credential not found", "api_not_found", {
+        idOrName: key
+      });
+    }
+
+    this.exec(`DELETE FROM clients WHERE id = ${sql(client.id)};`);
+    this.audit(actorUserId, "api.delete", "api", client.id, {
+      name: client.name,
+      requested: key
+    });
+
     return publicClient(client);
   }
 

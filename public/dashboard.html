@@ -193,9 +193,20 @@
 
     <dialog id="secret-dialog">
       <form method="dialog" class="dialog-form">
-        <h3>API 密钥</h3>
+        <h3>API 接入凭据</h3>
+        <p class="meta">请立即复制保存。apikey / clientSecret 只显示一次，关闭后无法再次查看；client_id 会长期显示在 API 列表中。</p>
+
+        <label>client_id</label>
+        <code id="client-id-once"></code>
+
+        <label>apikey / clientSecret</label>
         <code id="client-secret"></code>
-        <menu><button value="default">关闭</button></menu>
+
+        <menu>
+          <button type="button" class="ghost" id="copy-created-client-id">复制 client_id</button>
+          <button type="button" class="ghost" id="copy-created-client-secret">复制 apikey</button>
+          <button value="default">关闭</button>
+        </menu>
       </form>
     </dialog>
 
