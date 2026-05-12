@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Account Dashboard</title>
+    <link rel="icon" href="/assets/favicon.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body data-page="dashboard">
+    <a class="skip-link" href="#workspace" data-i18n="skipDashboard">跳到主内容</a>
+    <main class="shell">
+      <aside class="side">
+        <div class="brand-row">
+          <div class="brand-icon" aria-hidden="true">js</div>
+          <div>
+            <h1>Account</h1>
+            <p>统一账户管理</p>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-button" data-view="users" data-i18n="usersNav">用户管理</button>
+          <button class="nav-button" data-view="clients" data-i18n="clientsNav">API 接入</button>
+          <button class="nav-button" data-view="audit" data-i18n="auditNav">审计日志</button>
+          <button class="nav-button" data-view="settings" data-i18n="settingsNav">个人设置</button>
+        </nav>
+      </aside>
+
+      <section class="stage">
+        <header class="bar">
+          <div>
+            <p class="kicker">统一身份中枢</p>
+            <h2 id="view-title">控制台</h2>
+          </div>
+          <div class="session">
+            <span id="current-user"></span>
+            <button type="button" class="ghost compact-action" data-lang="zh-CN">中文</button>
+            <button type="button" class="ghost compact-action" data-lang="en">English</button>
+            <button data-logout class="ghost" data-i18n="logout">退出</button>
+          </div>
+        </header>
+
+        <section id="workspace" class="workspace" tabindex="-1">
+          <div id="must-change" class="banner hidden">请先更新当前账户密码。</div>
+
+          <section class="view hidden" data-view-panel="users">
+            <div class="toolbar">
+              <h3>统一用户</h3>
+              <div class="toolbar-actions">
+                <div class="segmented" id="user-filter">
+                  <button class="segment active" data-filter="all">全部</button>
+                  <button class="segment" data-filter="system_admin">系统管理员</button>
+                  <button class="segment" data-filter="operator">运营管理员</button>
+                  <button class="segment" data-filter="auditor">审计员</button>
+                  <button class="segment" data-filter="member">成员</button>
+                </div>
+                <button id="create-user-button">新建用户</button>
+              </div>
+            </div>
+            <div id="users-grid" class="tile-grid"></div>
+          </section>
+
+          <section class="view hidden" data-view-panel="clients">
+            <div class="toolbar">
+              <h3>API 接入</h3>
+              <div class="toolbar-actions">
+                <button id="create-client-button">新增 API</button>
+              </div>
+            </div>
+            <div id="clients-grid" class="tile-grid"></div>
+          </section>
+
+          <section class="view hidden" data-view-panel="audit">
+            <div class="toolbar">
+              <h3>审计日志</h3>
+              <div class="toolbar-actions">
+                <select id="audit-limit" title="审计日志数量">
+                  <option value="40">40 条</option>
+                  <option value="80" selected>80 条</option>
+                  <option value="160">160 条</option>
+                </select>
+                <button id="refresh-audit-button" class="ghost">刷新</button>
+              </div>
+            </div>
+            <div id="audit-list" class="audit-list"></div>
+          </section>
+
+          <section class="view hidden" data-view-panel="settings">
+            <div class="settings-grid">
+              <div class="panel">
+                <h3 id="role-title">账户类型</h3>
+                <p id="role-detail" class="meta"></p>
+                <div id="capability-list" class="capability-list"></div>
+              </div>
+              <form id="profile-form" class="panel">
+                <h3>账户资料</h3>
+                <label>显示名称<input name="displayName" autocomplete="name" required></label>
+                <button type="submit">保存</button>
+              </form>
+              <form id="password-form" class="panel">
+                <h3>修改密码</h3>
+                <label>当前密码<input name="currentPassword" type="password" autocomplete="current-password" required></label>
+                <label>新密码<input name="newPassword" type="password" autocomplete="new-password" minlength="10" required></label>
+                <button type="submit">更新</button>
+              </form>
+              <div class="panel danger-zone">
+                <h3>注销账户</h3>
+                <p class="meta">注销会停用整个账户并立即退出所有设备。账户停用后，绑定登录和第三方服务项目将无法正常获取你的账户信息，因此相关服务可能无法正常使用。</p>
+                <ul class="danger-list">
+                  <li>注销后不能继续登录。</li>
+                  <li>需要系统管理员重新启用后才能恢复访问。</li>
+                  <li>已创建的审计记录会保留，第三方项目中已有的业务数据不会在这里删除。</li>
+                </ul>
+                <button type="button" class="danger compact-action" id="deactivate-account-button">提交注销账户</button>
+              </div>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="user-dialog">
+      <form method="dialog" id="user-form" class="dialog-form">
+        <h3>新建用户</h3>
+        <label>邮箱<input name="email" type="email" autocomplete="username" required></label>
+        <label>显示名<input name="displayName" autocomplete="name"></label>
+        <div class="inline-field">
+          <label>初始密码<input name="password" type="text" autocomplete="new-password" minlength="10" placeholder="留空自动生成"></label>
+          <button type="button" class="ghost" id="generate-user-password">生成</button>
+        </div>
+        <fieldset>
+          <legend>用户类型</legend>
+          <div class="choice-row" data-choice-group="user-role">
+            <button type="button" class="choice active" data-value="member">成员</button>
+            <button type="button" class="choice" data-value="operator">运营管理员</button>
+            <button type="button" class="choice" data-value="auditor">审计员</button>
+            <button type="button" class="choice" data-value="system_admin">系统管理员</button>
+          </div>
+          <input type="hidden" name="role" value="member">
+        </fieldset>
+        <fieldset>
+          <legend>状态</legend>
+          <label class="switch"><input name="status" type="checkbox" autocomplete="off" checked><span></span>启用账户</label>
+        </fieldset>
+        <menu><button type="button" value="cancel" class="ghost" data-close-dialog>取消</button><button value="default">创建</button></menu>
+      </form>
+    </dialog>
+
+    <dialog id="client-dialog">
+      <form method="dialog" id="client-form" class="dialog-form">
+        <h3>新增 API</h3>
+        <div class="preset-row" id="client-presets">
+          <button type="button" class="ghost" data-preset="read">只读账户</button>
+          <button type="button" class="ghost" data-preset="identity">身份接入</button>
+          <button type="button" class="ghost" data-preset="service">服务端接入</button>
+        </div>
+        <label>名称<input name="name" autocomplete="organization-title" required placeholder="service-api"></label>
+        <label>回调地址<textarea name="redirectUris" autocomplete="url" rows="3" placeholder="https://example.com/auth/callback"></textarea></label>
+        <fieldset>
+          <legend>权限范围</legend>
+          <div class="chip-grid" id="client-scopes">
+            <label class="chip"><input type="checkbox" value="accounts:read" checked><span>账户读取</span></label>
+            <label class="chip"><input type="checkbox" value="users:read"><span>用户读取</span></label>
+            <label class="chip"><input type="checkbox" value="identities:resolve"><span>身份解析</span></label>
+            <label class="chip"><input type="checkbox" value="identities:link" checked><span>身份绑定</span></label>
+            <label class="chip"><input type="checkbox" value="audit:read"><span>审计读取</span></label>
+          </div>
+        </fieldset>
+        <menu><button type="button" value="cancel" class="ghost" data-close-dialog>取消</button><button value="default">创建</button></menu>
+      </form>
+    </dialog>
+
+    <dialog id="disable-user-dialog">
+      <form method="dialog" id="disable-user-form" class="dialog-form">
+        <h3>停用账户</h3>
+        <p id="disable-user-name" class="meta"></p>
+        <p class="meta">停用会保留账户、邮箱和身份绑定数据，相同邮箱或第三方身份不能重新注册。用户登录时会看到这里填写的原因和支持邮箱。</p>
+        <input type="hidden" name="userId">
+        <label>停用原因<textarea name="reason" autocomplete="off" rows="3" required placeholder="例如：违反使用规则，需要联系 helper@js.gripe 恢复"></textarea></label>
+        <menu><button type="button" value="cancel" class="ghost" data-close-dialog>取消</button><button type="submit" value="default" class="danger">提交停用</button></menu>
+      </form>
+    </dialog>
+
+    <dialog id="delete-user-dialog">
+      <form method="dialog" id="delete-user-form" class="dialog-form">
+        <h3>删除账户</h3>
+        <p id="delete-user-name" class="meta"></p>
+        <p class="meta">删除会完全移除账户、会话和第三方身份绑定，之后允许使用相同邮箱或身份重新注册。审计记录会保留删除动作。</p>
+        <input type="hidden" name="userId">
+        <menu><button type="button" value="cancel" class="ghost" data-close-dialog>取消</button><button type="submit" value="default" class="danger">确认删除</button></menu>
+      </form>
+    </dialog>
+
+    <dialog id="secret-dialog">
+      <form method="dialog" class="dialog-form">
+        <h3>API 密钥</h3>
+        <code id="client-secret"></code>
+        <menu><button value="default">关闭</button></menu>
+      </form>
+    </dialog>
+
+    <dialog id="deactivate-dialog">
+      <form method="dialog" class="dialog-form">
+        <h3>注销账户</h3>
+        <p class="meta">确认后整个账户会被停用，并立即退出所有会话。绑定登录和第三方服务项目将无法正常获取你的账户信息，因此相关服务可能无法正常使用。</p>
+        <ul class="danger-list">
+          <li>当前登录会话会失效。</li>
+          <li>再次访问需要系统管理员重新启用账户。</li>
+          <li>这个操作不会删除审计记录，也不会删除第三方项目里的业务数据。</li>
+        </ul>
+        <menu><button type="button" value="cancel" class="ghost" data-close-dialog>取消</button><button type="button" value="default" class="danger" id="confirm-deactivate-button">确认注销</button></menu>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast hidden"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

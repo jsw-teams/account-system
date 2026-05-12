@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Account Login</title>
+    <link rel="icon" href="/assets/favicon.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body data-page="login">
+    <a class="skip-link" href="#auth-stage" data-i18n="skip">跳到登录表单</a>
+    <main class="login-shell">
+      <section class="login-visual">
+        <div class="brand-row">
+          <div class="brand-icon" aria-hidden="true">js</div>
+          <div>
+            <h1>Account Center</h1>
+            <p>account.js.gripe</p>
+          </div>
+        </div>
+        <div class="mascot-frame" aria-hidden="true">
+          <img src="/assets/mascot-account.png" alt="" width="230" height="230" loading="eager" decoding="async">
+        </div>
+      </section>
+
+      <section id="auth-stage" class="login-stage" aria-live="polite">
+        <div class="language-row" aria-label="Language">
+          <button type="button" class="ghost compact-action" data-lang="zh-CN">中文</button>
+          <button type="button" class="ghost compact-action" data-lang="en">English</button>
+        </div>
+        <div id="authorize-context" class="auth-context hidden" role="status"></div>
+        <section id="session-confirm" class="auth-panel session-confirm hidden" aria-labelledby="session-confirm-title">
+          <p class="kicker">Confirm</p>
+          <h2 id="session-confirm-title" data-i18n="confirmTitle">确认账户</h2>
+          <p id="session-confirm-copy" class="confirm-copy"></p>
+          <div class="confirm-actions">
+            <button type="button" id="continue-session" data-i18n="continueAccount">继续使用该账户</button>
+            <button type="button" class="ghost" id="switch-session" data-i18n="switchAccount">切换账户</button>
+            <button type="button" class="danger" id="forget-session" data-i18n="forgetAccount">让此浏览器忘记该账户</button>
+          </div>
+        </section>
+
+        <form id="setup-form" class="auth-panel hidden" aria-describedby="setup-error">
+          <p class="kicker">Setup</p>
+          <h2 data-i18n="setupTitle">创建系统管理员</h2>
+          <div class="field-row">
+            <label><span data-i18n="email">邮箱</span><input name="email" type="email" autocomplete="username" required></label>
+            <label><span data-i18n="displayName">显示名</span><input name="displayName" autocomplete="name" value="Administrator"></label>
+          </div>
+          <label><span data-i18n="password">密码</span><input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+          <label><span data-i18n="confirmPassword">确认密码</span><input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" required></label>
+          <button type="submit" data-i18n="finishSetup">完成初始化</button>
+          <p id="setup-error" class="form-error" role="alert"></p>
+        </form>
+
+        <form id="login-form" class="auth-panel hidden" aria-describedby="login-error">
+          <p class="kicker">Sign in</p>
+          <h2 data-i18n="loginTitle">登录账户中心</h2>
+          <label><span data-i18n="email">邮箱</span><input name="email" type="email" autocomplete="username" required></label>
+          <label><span data-i18n="password">密码</span><input name="password" type="password" autocomplete="current-password" required></label>
+          <button type="submit" data-i18n="signIn">登录</button>
+          <button type="button" class="ghost" id="show-register" data-i18n="createAccount">自主注册</button>
+          <p id="login-error" class="form-error" role="alert"></p>
+        </form>
+
+        <form id="register-form" class="auth-panel hidden" aria-describedby="register-error">
+          <p class="kicker">Register</p>
+          <h2 data-i18n="registerTitle">注册统一账户</h2>
+          <div class="field-row">
+            <label><span data-i18n="email">邮箱</span><input name="email" type="email" autocomplete="username" required></label>
+            <label><span data-i18n="displayName">显示名</span><input name="displayName" autocomplete="name"></label>
+          </div>
+          <label><span data-i18n="password">密码</span><input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+          <label><span data-i18n="confirmPassword">确认密码</span><input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" required></label>
+          <button type="submit" data-i18n="registerAndContinue">注册并继续</button>
+          <button type="button" class="ghost" id="show-login" data-i18n="backToLogin">返回登录</button>
+          <p id="register-error" class="form-error" role="alert"></p>
+        </form>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
