@@ -11,7 +11,9 @@ const state = {
   view: "settings",
   userFilter: "all",
   users: [],
-  clients: []
+  clients: [],
+  authClient: null,
+  authClientLoading: false
 };
 
 const i18n = {
@@ -35,13 +37,13 @@ const i18n = {
     clientsNav: "API 接入",
     auditNav: "审计日志",
     settingsNav: "个人设置",
-    authorizePrefix: "登录后将授权第三方应用：",
+    authorizePrefix: "登录后将授权：",
     confirmTitle: "确认账户",
     continueAccount: "继续使用该账户",
     switchAccount: "切换账户",
     forgetAccount: "让此浏览器忘记该账户",
     forgottenAccount: "此浏览器已忘记该账户",
-    confirmAuthorize: "当前已登录 {email}。确认后将授权第三方应用：{client}",
+    confirmAuthorize: "当前已登录 {email}。确认后将授权：{client}",
     confirmDashboard: "当前已登录 {email}。确认后进入账户中心，或切换为其他账户。",
     passwordMismatch: "两次密码不一致",
     adminCreated: "系统管理员已创建",
@@ -180,7 +182,12 @@ async function bootLogin() {
   $("#continue-session")?.addEventListener("click", continueExistingSession);
   $("#switch-session")?.addEventListener("click", switchExistingSession);
   $("#forget-session")?.addEventListener("click", forgetExistingSession);
-  renderAuthorizeContext();
+  if (auth) {
+    renderAuthorizeLoading();
+    await loadAuthorizeClient(auth.clientId);
+  } else {
+    renderAuthorizeContext();
+  }
 
   if (state.initialized && state.token) {
     try {
@@ -791,6 +798,7 @@ async function request(path, options = {}) {
   }
   const response = await fetch(`${apiBase}${path}`, {
     method: options.method || "GET",
+    cache: options.cache || "no-store",
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
@@ -871,8 +879,9 @@ function showSessionConfirm() {
   const template = auth ? t("confirmAuthorize") : t("confirmDashboard");
   $("#session-confirm-copy").textContent = template
     .replace("{email}", email)
-    .replace("{client}", auth?.clientId || "Account Center");
+    .replace("{client}", clientDisplayName(auth));
   panel.classList.remove("hidden");
+  setAuthActionsEnabled(!state.authClientLoading);
 }
 
 function authRequest() {
@@ -897,8 +906,46 @@ function renderAuthorizeContext() {
   const auth = authRequest();
   target.classList.toggle("hidden", !auth);
   if (auth) {
-    target.textContent = `${t("authorizePrefix")} ${auth.clientId}`;
+    const name = clientDisplayName(auth);
+    target.textContent = name ? `${t("authorizePrefix")} ${name}` : "";
   }
+}
+
+function renderAuthorizeLoading() {
+  const target = $("#authorize-context");
+  if (!target) return;
+  state.authClientLoading = true;
+  target.classList.remove("hidden");
+  target.textContent = state.lang === "zh-CN" ? "正在加载应用信息…" : "Loading application details...";
+  setAuthActionsEnabled(false);
+}
+
+async function loadAuthorizeClient(clientId) {
+  try {
+    const result = await request(`/clients/public?client_id=${encodeURIComponent(clientId)}`, {
+      auth: false,
+      cache: "no-store"
+    });
+    state.authClient = result.client || null;
+  } catch {
+    state.authClient = null;
+  } finally {
+    state.authClientLoading = false;
+  }
+  renderAuthorizeContext();
+  setAuthActionsEnabled(Boolean(state.authClient));
+}
+
+function clientDisplayName(auth = authRequest()) {
+  if (!auth) return "Account Center";
+  return state.authClient?.name || "";
+}
+
+function setAuthActionsEnabled(enabled) {
+  ["#continue-session", "#login-form button[type='submit']", "#register-form button[type='submit']"].forEach((selector) => {
+    const button = $(selector);
+    if (button) button.disabled = !enabled;
+  });
 }
 
 function applyLanguage() {

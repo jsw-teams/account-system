@@ -68,6 +68,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && routePath === "/clients/public") {
+      const client = store.getClient(url.searchParams.get("client_id") || url.searchParams.get("clientId"));
+      sendJson(req, res, client ? 200 : 404, client ? {
+        client: {
+          id: client.id,
+          name: client.name,
+          redirectUris: client.redirectUris,
+          scopes: client.scopes,
+          status: client.status
+        }
+      } : { error: "api client not found", code: "client_not_found", detail: {} });
+      return;
+    }
+
     const session = requireSession(req);
 
     if (req.method === "POST" && routePath === "/auth/logout") {
@@ -311,9 +325,10 @@ async function serveStatic(req, res, url) {
   }
 
   const body = await fs.readFile(filePath);
+  const type = contentType(filePath);
   res.writeHead(200, {
-    "content-type": contentType(filePath),
-    "cache-control": filePath.endsWith("index.html") ? "no-store" : "public, max-age=3600",
+    "content-type": type,
+    "cache-control": cacheControlForStatic(filePath, type),
     "content-length": body.length
   });
   if (req.method === "HEAD") {
@@ -369,6 +384,14 @@ function contentType(filePath) {
   if (filePath.endsWith(".webp")) return "image/webp";
   if (filePath.endsWith(".ico")) return "image/x-icon";
   return "text/html; charset=utf-8";
+}
+
+function cacheControlForStatic(filePath, type) {
+  const name = path.basename(filePath);
+  if (filePath.endsWith("index.html") || name === "login.html" || name === "dashboard.html" || type.startsWith("text/javascript")) {
+    return "no-store";
+  }
+  return "public, max-age=3600";
 }
 
 function normalizeBasePath(value) {

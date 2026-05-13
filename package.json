@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "db:check": "node scripts/db-check.mjs",
+    "client:myfiles": "node scripts/create-myfiles-client.mjs",
     "ui:smoke": "node tests/ui-smoke.mjs",
     "test": "node --test"
   },
