@@ -134,6 +134,32 @@ The third-party service should:
 
 The login UI waits for public client information before allowing the user to continue, so users see the application name rather than the raw client id.
 
+### Best Redirect Example: myfiles
+
+`myfiles` is the reference third-party redirect flow because it keeps the unified account token out of browser storage and turns it into a service-owned session cookie.
+
+Recommended API client:
+
+```text
+Name: myfiles
+Redirect URI: https://files.js.gripe/auth/account/callback
+Scopes: accounts:read identities:resolve
+```
+
+Authorization URL shape:
+
+```text
+https://account.js.gripe/login?client_id=<clientId>&redirect_uri=https%3A%2F%2Ffiles.js.gripe%2Fauth%2Faccount%2Fcallback&scope=accounts%3Aread%20identities%3Aresolve&state=<opaque-state>&prompt=consent
+```
+
+Implementation notes:
+
+- Start login from the third-party service, not from account-system internals.
+- Store `state` in an HttpOnly, same-site cookie scoped to the callback path.
+- After callback, verify `state`, call `/me` with the returned bearer token, then issue the app's own session cookie.
+- Redirect the browser back to the app dashboard and clear the temporary OAuth state cookie.
+- Do not persist `account_session` in localStorage or expose it to app JavaScript.
+
 ## Client Management
 
 System administrators create API clients in `/dashboard`.

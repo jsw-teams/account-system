@@ -748,6 +748,11 @@ function resetChoices(scope) {
 
 function applyClientPreset(name) {
   const presets = {
+    myfiles: {
+      displayName: "myfiles",
+      redirectUris: "https://files.js.gripe/auth/account/callback",
+      scopes: ["accounts:read", "identities:resolve"]
+    },
     read: {
       redirectUris: "",
       scopes: ["accounts:read"]
@@ -764,7 +769,7 @@ function applyClientPreset(name) {
   const preset = presets[name];
   if (!preset) return;
   const form = $("#client-form");
-  form.elements.name.value = name;
+  form.elements.name.value = preset.displayName || name;
   form.elements.redirectUris.value = preset.redirectUris;
   $$("#client-scopes input").forEach((input) => {
     input.checked = preset.scopes.includes(input.value);
