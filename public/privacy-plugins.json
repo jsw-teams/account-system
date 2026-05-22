@@ -26,7 +26,7 @@
       "settings": "隐私设置",
       "required": "必要",
       "optional": "可选",
-      "gpc": "检测到浏览器全局隐私控制或 Do Not Track，非必要插件已保持关闭。",
+      "gpc": "检测到浏览器全局隐私控制或 Do Not Track，非必要插件默认保持关闭；你仍可以管理偏好。",
       "categories": {
         "analytics": {
           "title": "分析",
@@ -52,7 +52,7 @@
       "settings": "隱私設定",
       "required": "必要",
       "optional": "可選",
-      "gpc": "偵測到瀏覽器全域隱私控制或 Do Not Track，非必要外掛已保持關閉。",
+      "gpc": "偵測到瀏覽器全域隱私控制或 Do Not Track，非必要外掛預設保持關閉；你仍可以管理偏好。",
       "categories": {
         "analytics": {
           "title": "分析",
@@ -78,7 +78,7 @@
       "settings": "Privacy settings",
       "required": "Required",
       "optional": "Optional",
-      "gpc": "A browser Global Privacy Control or Do Not Track signal was detected, so optional plugins remain off.",
+      "gpc": "A browser Global Privacy Control or Do Not Track signal was detected, so optional plugins start off by default; you can still manage preferences.",
       "categories": {
         "analytics": {
           "title": "Analytics",

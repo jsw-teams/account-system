@@ -31,8 +31,7 @@
       settings: "隐私设置",
       required: "必要",
       optional: "可选",
-      requiredChoice: "浏览器已要求不要跟踪，非必要插件必须保持关闭。",
-      gpc: "检测到浏览器全局隐私控制或 Do Not Track，非必要插件已保持关闭。",
+      gpc: "检测到浏览器全局隐私控制或 Do Not Track，非必要插件默认保持关闭；你仍可以管理偏好。",
       categories: {
         analytics: {
           title: "分析",
@@ -57,8 +56,7 @@
       settings: "隱私設定",
       required: "必要",
       optional: "可選",
-      requiredChoice: "瀏覽器已要求不要追蹤，非必要外掛必須保持關閉。",
-      gpc: "偵測到瀏覽器全域隱私控制或 Do Not Track，非必要外掛已保持關閉。",
+      gpc: "偵測到瀏覽器全域隱私控制或 Do Not Track，非必要外掛預設保持關閉；你仍可以管理偏好。",
       categories: {
         analytics: {
           title: "分析",
@@ -83,8 +81,7 @@
       settings: "Privacy settings",
       required: "Required",
       optional: "Optional",
-      requiredChoice: "Your browser asks not to be tracked, so optional plugins must stay off.",
-      gpc: "A browser Global Privacy Control or Do Not Track signal was detected, so optional plugins remain off.",
+      gpc: "A browser Global Privacy Control or Do Not Track signal was detected, so optional plugins start off by default; you can still manage preferences.",
       categories: {
         analytics: {
           title: "Analytics",
@@ -374,7 +371,6 @@
     const profile = regionProfile(context.country);
     const notice = copy.jurisdictionNotice?.[profile] || copy.jurisdictionNotice?.default;
     if (notice) panel.append(text("p", notice, "privacy-plugin-notice"));
-    if (context.globalOptOut) panel.append(text("p", copy.requiredChoice || copy.gpc, "privacy-plugin-notice"));
 
     const list = document.createElement("div");
     list.className = "privacy-plugin-categories";
@@ -386,8 +382,7 @@
       const input = document.createElement("input");
       input.type = "checkbox";
       input.dataset.category = category;
-      input.checked = choices[category] === true && !context.globalOptOut;
-      input.disabled = context.globalOptOut;
+      input.checked = choices[category] === true;
       input.addEventListener("change", () => {
         choices[category] = input.checked;
       });
@@ -397,7 +392,7 @@
       categoryPlugins.forEach((plugin) => {
         body.append(text("small", plugin.disclosure || plugin.name || plugin.id));
       });
-      item.append(input, body, text("em", context.globalOptOut ? copy.required : copy.optional));
+      item.append(input, body, text("em", copy.optional));
       list.append(item);
     });
     panel.append(list);
@@ -413,7 +408,8 @@
     panel.append(button(copy.close, "close", "text"));
     overlay.append(panel);
     document.body.append(overlay);
-    const focusTarget = panel.querySelector("button, input:not(:disabled)") || panel;
+    panel.tabIndex = -1;
+    const focusTarget = panel;
     focusTarget.focus?.();
 
     const closePreferenceCenter = () => {
@@ -440,7 +436,7 @@
       }
       if (action === "reject" || action === "accept") {
         list.querySelectorAll("input[type='checkbox']").forEach((input) => {
-          input.checked = action === "accept" && !context.globalOptOut;
+          input.checked = action === "accept";
         });
       }
       list.querySelectorAll("input[type='checkbox']").forEach((input) => {
@@ -488,12 +484,8 @@
       button(copy.customize, "customize", "secondary"),
       button(copy.acceptAll, "accept", "primary")
     );
-    if (context.globalOptOut) {
-      actions.querySelector("[data-privacy-action='accept']").disabled = true;
-    }
     banner.append(content, actions);
     document.body.append(banner);
-    actions.querySelector("button:not(:disabled)")?.focus?.();
 
     banner.addEventListener("click", (event) => {
       const action = event.target.closest("[data-privacy-action]")?.dataset.privacyAction;
@@ -507,9 +499,9 @@
       const categories = categoriesFor(context);
       const choices = {};
       categories.forEach((category) => {
-        choices[category] = action === "accept" && !context.globalOptOut;
+        choices[category] = action === "accept";
       });
-      const consent = saveConsent(action === "accept" && !context.globalOptOut ? "accepted" : "rejected", choices, context.country);
+      const consent = saveConsent(action === "accept" ? "accepted" : "rejected", choices, context.country);
       banner.remove();
       if (needsReloadForDisabledPlugins(context.gatedPlugins, choices)) {
         window.location.reload();
@@ -550,11 +542,8 @@
       if (!globalOptOut) plugins.forEach(loadPlugin);
       return;
     }
-    if (globalOptOut && !saved) {
-      saved = saveConsent("rejected", emptyChoices(context), country);
-    }
     if (saved?.version === 4) {
-      applyConsent(plugins, gatedPlugins, globalOptOut ? { choices: {} } : saved);
+      applyConsent(plugins, gatedPlugins, saved);
       renderSettingsButton(config, context);
       return;
     }
