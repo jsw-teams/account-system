@@ -49,6 +49,11 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
+body[data-page="login"] {
+  --privacy-plugin-banner-bottom: 16px;
+  --privacy-plugin-settings-bottom: 16px;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -69,6 +74,22 @@ body {
   display: grid;
   place-items: center;
   padding: 28px;
+}
+
+body[data-page="login"] .privacy-plugin-banner {
+  position: static;
+  width: min(980px, calc(100% - 32px));
+  margin: -96px auto 24px;
+}
+
+body[data-page="login"] .privacy-plugin-settings {
+  bottom: 16px;
+}
+
+@media (max-width: 820px) {
+  body[data-page="login"] .privacy-plugin-banner {
+    margin-top: 18px;
+  }
 }
 
 button,

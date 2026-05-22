@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.mjs",
+    "sync:cookies": "node /opt/mycookies/scripts/sync-to-projects.mjs",
     "db:check": "node scripts/db-check.mjs",
     "client:myfiles": "node scripts/create-myfiles-client.mjs",
     "ui:smoke": "node tests/ui-smoke.mjs",
