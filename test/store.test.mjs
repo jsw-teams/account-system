@@ -42,6 +42,9 @@ test("creates clients and verifies client secrets", async () => {
 
   assert.ok(client.clientSecret);
   assert.equal(store.verifyClient(client.id, client.clientSecret).name, "myweb");
+  assert.equal(store.verifyClientCredentials({ client_id: client.id, clientSecret: client.clientSecret }).name, "myweb");
+  assert.equal(store.verifyClientCredentials({ clientId: client.id, client_secret: client.clientSecret }).name, "myweb");
+  assert.equal(store.verifyClientCredentials({ client_id: client.id, api_key: client.clientSecret }).name, "myweb");
   assert.equal(store.verifyClient(client.id, "bad-secret"), null);
 
   const deleted = await store.deleteClient(client.id);

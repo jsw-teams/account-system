@@ -215,7 +215,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && (routePath === "/clients/verify" || routePath === "/apis/verify")) {
       const body = await readJson(req);
-      const client = store.verifyClient(body.clientId, body.clientSecret);
+      const client = store.verifyClientCredentials(body);
       sendJson(req, res, client ? 200 : 401, client ? { api: client, client } : { error: "bad api credentials", code: "bad_api_credentials", detail: {} });
       return;
     }

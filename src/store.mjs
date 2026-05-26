@@ -517,6 +517,12 @@ export class AccountStore {
     return publicClient(client);
   }
 
+  verifyClientCredentials(input = {}) {
+    const clientId = input.clientId || input.client_id || input.id;
+    const clientSecret = input.clientSecret || input.client_secret || input.apiKey || input.api_key;
+    return this.verifyClient(clientId, clientSecret);
+  }
+
   getClient(clientId) {
     const client = this.queryOne(`
       SELECT * FROM clients WHERE id = ${sql(clientId)} AND status = 'active'
