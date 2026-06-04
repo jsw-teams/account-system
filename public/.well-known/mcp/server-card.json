@@ -1,0 +1,23 @@
+{
+  "serverInfo": {
+    "name": "Account.js.gripe Discovery",
+    "version": "1.0.0"
+  },
+  "transport": {
+    "type": "webmcp",
+    "endpoint": "https://account.js.gripe/"
+  },
+  "capabilities": {
+    "tools": [
+      {
+        "name": "list_discovery_resources",
+        "description": "List public discovery resources for Account.js.gripe without accessing protected account data."
+      },
+      {
+        "name": "describe_account_api",
+        "description": "Describe authentication requirements and public API metadata for Account.js.gripe."
+      }
+    ],
+    "resources": []
+  }
+}

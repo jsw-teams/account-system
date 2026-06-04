@@ -1,0 +1,6 @@
+{
+  "status": "available",
+  "service": "account-system",
+  "url": "https://account.js.gripe/",
+  "health": "https://gateway.js.gripe/api/v1/myaccount/healthz"
+}

@@ -1,0 +1,6 @@
+Content-Signal: ai-train=no, search=no, ai-input=no
+
+User-agent: *
+Disallow: /
+
+Sitemap: https://account.js.gripe/sitemap.xml

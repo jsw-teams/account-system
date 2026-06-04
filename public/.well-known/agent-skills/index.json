@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agentskills.io/schemas/agent-skills-index-v0.2.0.json",
+  "skills": [
+    {
+      "name": "account-authentication",
+      "type": "documentation",
+      "description": "Discover Account.js.gripe authentication requirements without crawling protected account data.",
+      "url": "https://account.js.gripe/.well-known/agent-skills/account-authentication.md",
+      "sha256": "37ddef322587e419dbdccdfb4853b70f8c5c0ff353b56353ff27ee479f87bf40"
+    },
+    {
+      "name": "discovery-resources",
+      "type": "documentation",
+      "description": "List the public Account.js.gripe discovery resources allowed for agents.",
+      "url": "https://account.js.gripe/.well-known/agent-skills/discovery-resources.md",
+      "sha256": "d16d75fd4e407eb0eac3bf6a8ef901f171d6c4b66751ea6f0915698f401951d4"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "resource": "https://gateway.js.gripe/api/v1/myaccount",
+  "authorization_servers": [
+    "https://account.js.gripe/"
+  ],
+  "scopes_supported": [
+    "accounts:read",
+    "users:read",
+    "identities:resolve",
+    "identities:link",
+    "audit:read"
+  ],
+  "bearer_methods_supported": [
+    "header"
+  ],
+  "resource_documentation": "https://account.js.gripe/auth.md"
+}

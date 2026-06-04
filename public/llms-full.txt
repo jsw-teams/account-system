@@ -1,0 +1,19 @@
+# Account.js.gripe Full Agent Notice
+
+Account.js.gripe is a private account center for authentication, identity resolution, API client management, and audit review. Public pages and authenticated dashboards are not appropriate crawling targets.
+
+Do not use this site for:
+- AI model training.
+- Search indexing.
+- Agent input, summarization, extraction, or autonomous browsing of account data.
+
+Agents may read only the public discovery metadata necessary to understand authentication requirements:
+- /auth.md
+- /.well-known/oauth-protected-resource
+- /.well-known/oauth-authorization-server
+- /.well-known/openid-configuration
+- /.well-known/api-catalog
+- /.well-known/mcp/server-card.json
+- /.well-known/agent-skills/index.json
+
+Protected API access requires a valid user session or service credential issued by an account administrator.

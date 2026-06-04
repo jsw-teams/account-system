@@ -1,0 +1,17 @@
+# Account.js.gripe
+
+Account.js.gripe is a protected account and identity service. It is not suitable for automated crawling, AI training, bulk extraction, or use as general agent input.
+
+Agents and crawlers should not index, summarize, train on, or interact with account pages except to read the discovery and authentication metadata listed below.
+
+Content preferences:
+- ai-train: no
+- search: no
+- ai-input: no
+
+Allowed discovery references:
+- https://account.js.gripe/auth.md
+- https://account.js.gripe/.well-known/oauth-protected-resource
+- https://account.js.gripe/.well-known/oauth-authorization-server
+- https://account.js.gripe/.well-known/api-catalog
+- https://account.js.gripe/.well-known/mcp/server-card.json

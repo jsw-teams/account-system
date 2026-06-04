@@ -1,0 +1,25 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://gateway.js.gripe/api/v1/myaccount",
+      "service-desc": [
+        {
+          "href": "https://account.js.gripe/openapi.json",
+          "type": "application/openapi+json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://account.js.gripe/auth.md",
+          "type": "text/markdown"
+        }
+      ],
+      "status": [
+        {
+          "href": "https://account.js.gripe/.well-known/status.json",
+          "type": "application/json"
+        }
+      ]
+    }
+  ]
+}
