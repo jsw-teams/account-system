@@ -23,6 +23,9 @@
     "client_secret_basic"
   ],
   "service_documentation": "https://account.js.gripe/auth.md",
+  "protected_resources": [
+    "https://account.js.gripe/"
+  ],
   "agent_auth": {
     "skill": "https://workos.com/auth.md",
     "register_uri": "https://account.js.gripe/auth.md#standalone-registration-flow",

@@ -1,5 +1,5 @@
 {
-  "resource": "https://gateway.js.gripe/api/v1/myaccount",
+  "resource": "https://account.js.gripe/",
   "authorization_servers": [
     "https://account.js.gripe/"
   ],
@@ -13,5 +13,6 @@
   "bearer_methods_supported": [
     "header"
   ],
+  "resource_name": "Account.js.gripe Account Center",
   "resource_documentation": "https://account.js.gripe/auth.md"
 }
