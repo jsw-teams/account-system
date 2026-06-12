@@ -355,6 +355,12 @@ dialog {
   gap: 12px;
 }
 
+.split-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 .workspace {
   padding: 26px 28px 52px;
 }
@@ -669,6 +675,12 @@ code {
   color: var(--red);
 }
 
+.form-note {
+  min-height: 20px;
+  color: var(--green);
+  overflow-wrap: anywhere;
+}
+
 .empty-state {
   border: 2px dashed var(--line);
   background: #fff;
@@ -725,6 +737,7 @@ code {
   }
 
   .field-row,
+  .split-actions,
   .settings-grid,
   .audit-row {
     grid-template-columns: 1fr;

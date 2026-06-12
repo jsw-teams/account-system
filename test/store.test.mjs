@@ -5,6 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import { AccountStore } from "../src/store.mjs";
 
+const uuidv7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 test("creates users, links identities, and resolves unified accounts", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "account-system-"));
   const store = new AccountStore(path.join(dir, "accounts.sqlite3"));
@@ -16,6 +18,7 @@ test("creates users, links identities, and resolves unified accounts", async () 
   });
 
   assert.equal(user.email, "alice@example.com");
+  assert.match(user.id, uuidv7Pattern);
 
   const identity = await store.linkIdentity(user.id, {
     provider: "GitHub",
@@ -24,6 +27,7 @@ test("creates users, links identities, and resolves unified accounts", async () 
   });
 
   assert.equal(identity.provider, "github");
+  assert.match(identity.id, uuidv7Pattern);
 
   const resolved = store.resolveIdentity("github", "123456");
   assert.equal(resolved.user.id, user.id);
@@ -41,6 +45,7 @@ test("creates clients and verifies client secrets", async () => {
   });
 
   assert.ok(client.clientSecret);
+  assert.match(client.id, uuidv7Pattern);
   assert.equal(store.verifyClient(client.id, client.clientSecret).name, "myweb");
   assert.equal(store.verifyClient(client.id, "bad-secret"), null);
 
@@ -49,7 +54,7 @@ test("creates clients and verifies client secrets", async () => {
   assert.equal(store.verifyClient(client.id, client.clientSecret), null);
 });
 
-test("self-registers members and authorizes registered redirect sessions", async () => {
+test("self-registers members and uses authorization code flow for third-party access", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "account-system-"));
   const store = new AccountStore(path.join(dir, "accounts.sqlite3"));
   await store.load();
@@ -63,7 +68,7 @@ test("self-registers members and authorizes registered redirect sessions", async
   assert.equal(user.mustChangePassword, false);
   assert.equal(user.initialPassword, undefined);
 
-  const login = await store.login("new@example.com", "NewUser123!");
+  await store.login("new@example.com", "NewUser123!");
   const client = await store.createClient({
     name: "third-party",
     redirectUris: ["https://third.example/auth/callback"],
@@ -75,19 +80,41 @@ test("self-registers members and authorizes registered redirect sessions", async
     redirectUri: "https://third.example/auth/callback",
     scope: "accounts:read identities:resolve",
     state: "state-123",
-    expiresAt: login.expiresAt
-  }, login.token, login.user);
+  }, user);
   const callback = new URL(auth.callbackUrl);
   assert.equal(callback.origin + callback.pathname, "https://third.example/auth/callback");
   assert.equal(callback.searchParams.get("state"), "state-123");
-  assert.equal(callback.searchParams.get("account_session"), login.token);
-  assert.equal(callback.searchParams.get("user_id"), user.id);
+  assert.ok(callback.searchParams.get("code"));
+  assert.equal(callback.searchParams.has("account_session"), false);
+  assert.equal(callback.searchParams.has("access_token"), false);
+  assert.equal(callback.searchParams.has("refresh_token"), false);
+  assert.equal(callback.searchParams.has("user_id"), false);
+
+  const exchanged = store.exchangeAuthorizationCode({
+    clientId: client.id,
+    clientSecret: client.clientSecret,
+    code: callback.searchParams.get("code"),
+    redirectUri: "https://third.example/auth/callback"
+  });
+  assert.equal(exchanged.tokenType, "Bearer");
+  assert.equal(exchanged.user.id, user.id);
+  assert.equal(store.getSession(exchanged.accessToken).user.id, user.id);
+
+  assert.throws(
+    () => store.exchangeAuthorizationCode({
+      clientId: client.id,
+      clientSecret: client.clientSecret,
+      code: callback.searchParams.get("code"),
+      redirectUri: "https://third.example/auth/callback"
+    }),
+    (error) => error.code === "invalid_grant"
+  );
 
   assert.throws(
     () => store.authorizeClientSession({
       clientId: client.id,
       redirectUri: "https://evil.example/callback"
-    }, login.token, login.user),
+    }, user),
     (error) => error.code === "invalid_redirect_uri"
   );
 });
@@ -101,7 +128,6 @@ test("rejects authorization scopes outside the client grant", async () => {
     email: "scope@example.com",
     password: "ScopePass123!"
   });
-  const login = await store.login("scope@example.com", "ScopePass123!");
   const client = await store.createClient({
     name: "limited",
     redirectUris: ["https://third.example/auth/callback"],
@@ -113,7 +139,7 @@ test("rejects authorization scopes outside the client grant", async () => {
       clientId: client.id,
       redirectUri: "https://third.example/auth/callback",
       scope: "audit:read"
-    }, login.token, user),
+    }, user),
     (error) => error.code === "invalid_scope"
   );
 });
@@ -208,7 +234,7 @@ test("disables users with a reason and deletes users for re-registration", async
     role: user.role,
     status: "disabled",
     disabledReason: "测试封禁"
-  }, "usr_actor");
+  }, "018ff5c8-9a08-7a1d-8b9d-2ab45e22a101");
   assert.equal(disabled.status, "disabled");
   assert.equal(disabled.disabledReason, "测试封禁");
 
@@ -222,7 +248,7 @@ test("disables users with a reason and deletes users for re-registration", async
     /email already exists/
   );
 
-  const deleted = await store.deleteUser(user.id, "usr_actor");
+  const deleted = await store.deleteUser(user.id, "018ff5c8-9a08-7a1d-8b9d-2ab45e22a101");
   assert.equal(deleted.email, "blocked@example.com");
   const recreated = await store.createUser({
     email: "blocked@example.com",
@@ -247,7 +273,7 @@ test("protects system administrators from user-management destructive actions", 
       displayName: admin.displayName,
       role: "member",
       status: "active"
-    }, "usr_actor"),
+    }, "018ff5c8-9a08-7a1d-8b9d-2ab45e22a101"),
     (error) => error.code === "protected_system_admin"
   );
 
@@ -257,12 +283,12 @@ test("protects system administrators from user-management destructive actions", 
       role: "system_admin",
       status: "disabled",
       disabledReason: "unsafe"
-    }, "usr_actor"),
+    }, "018ff5c8-9a08-7a1d-8b9d-2ab45e22a101"),
     (error) => error.code === "protected_system_admin"
   );
 
   await assert.rejects(
-    () => store.deleteUser(admin.id, "usr_actor"),
+    () => store.deleteUser(admin.id, "018ff5c8-9a08-7a1d-8b9d-2ab45e22a101"),
     (error) => error.code === "protected_system_admin"
   );
 });

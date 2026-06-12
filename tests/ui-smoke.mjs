@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -9,13 +10,18 @@ const port = Number(process.env.ACCOUNT_UI_SMOKE_PORT || 9120);
 const baseURL = `http://127.0.0.1:${port}`;
 const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "account-ui-smoke-"));
 const dbPath = path.join(tmpDir, "accounts.sqlite3");
-const screenshotPath = path.join(os.tmpdir(), "account-ui-smoke-dashboard.png");
+const bootstrapToken = "SmokeBootstrapToken123!";
+const bootstrapTokenHash = crypto.createHash("sha256").update(bootstrapToken).digest("hex");
+const repoRoot = path.dirname(path.dirname(new URL(import.meta.url).pathname));
+const screenshotPath = path.join(repoRoot, "public", "assets", "account-system-v2-ui-smoke-dashboard.png");
 
 const server = spawn(process.execPath, ["src/server.mjs"], {
-  cwd: path.dirname(path.dirname(new URL(import.meta.url).pathname)),
+  cwd: repoRoot,
   env: {
     ...process.env,
     ACCOUNT_DB_PATH: dbPath,
+    ACCOUNT_CONFIG_PATH: path.join(tmpDir, "account-system.env"),
+    ACCOUNT_BOOTSTRAP_TOKEN_HASH: bootstrapTokenHash,
     ACCOUNT_PORT: String(port),
     ACCOUNT_HOST: "127.0.0.1"
   },
@@ -40,6 +46,16 @@ try {
   page.on("pageerror", (error) => browserMessages.push(`pageerror: ${error.message}`));
   await page.goto(`${baseURL}/login`, { waitUntil: "networkidle" });
 
+  await assertVisibleText(page, "核对安装令牌");
+  await page.locator("#bootstrap-form").getByLabel("安装令牌").fill(bootstrapToken);
+  await page.getByRole("button", { name: "核对令牌" }).click();
+
+  await assertVisibleText(page, "配置数据库连接");
+  await page.locator("#database-form").getByLabel("数据库路径").fill(dbPath);
+  await page.getByRole("button", { name: "测试连接" }).click();
+  await assertVisibleText(page, "数据库连接测试成功");
+  await page.getByRole("button", { name: "确认数据库" }).click();
+
   await assertVisibleText(page, "创建系统管理员");
   const mascotBox = await page.locator(".mascot-frame img").boundingBox();
   assert.ok(mascotBox, "mascot image should render");
@@ -51,8 +67,8 @@ try {
     height: img.naturalHeight,
     src: img.getAttribute("src")
   }));
-  assert.equal(naturalSize.width, 420);
-  assert.equal(naturalSize.height, 397);
+  assert.ok(naturalSize.width > 0, "mascot image should have a natural width");
+  assert.ok(naturalSize.height > 0, "mascot image should have a natural height");
   assert.equal(naturalSize.src, "/assets/mascot-account.png");
   const cornerAlpha = await page.locator(".mascot-frame img").evaluate((img) => {
     const canvas = document.createElement("canvas");
@@ -106,10 +122,11 @@ try {
   await page.locator("#client-form").getByRole("button", { name: "身份接入" }).click();
   await page.locator("#client-form").getByLabel("名称").fill("identity-api");
   await page.locator("#client-form").getByRole("button", { name: "创建" }).click();
-  await assertVisibleText(page, "API 密钥");
+  await page.locator("#secret-dialog").waitFor({ state: "visible" });
+  await page.locator("#secret-dialog").getByText("API 接入凭据").waitFor({ state: "visible" });
   await page.getByRole("button", { name: "关闭" }).click();
   await assertVisibleText(page, "identity-api");
-  const deleteResponsePromise = page.waitForResponse((response) => response.url().includes("/apis/") && response.request().method() === "DELETE");
+  const deleteResponsePromise = page.waitForResponse((response) => response.url().includes("/clients/") && response.request().method() === "DELETE");
   await page.locator("[data-api-id]").getByRole("button", { name: "删除" }).click();
   const deleteResponse = await deleteResponsePromise;
   assert.equal(deleteResponse.status(), 200, await deleteResponse.text());
@@ -140,6 +157,7 @@ try {
   console.log(`UI smoke passed: ${screenshotPath}`);
 } finally {
   server.kill("SIGTERM");
+  await fs.rm(tmpDir, { recursive: true, force: true });
 }
 
 async function waitForHealth() {

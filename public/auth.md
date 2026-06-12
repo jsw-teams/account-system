@@ -15,7 +15,8 @@ Agents that need API access must be represented by an authorized user account or
 Protected APIs are served from `https://gateway.js.gripe/api/v1/myaccount`.
 
 Supported credential patterns:
-- User session bearer token issued after an interactive sign-in.
+- Browser session bearer token issued after an interactive sign-in for the Account Center UI.
+- OAuth-style authorization code flow for third-party services. Redirect URLs carry only `code` and optional `state`; service backends exchange the code at `/auth/token` with their client secret and then issue their own app session cookies.
 - Administrator-created API client credential where an integrating service is approved.
 
 Discovery metadata:

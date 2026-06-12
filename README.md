@@ -4,6 +4,8 @@
 
 It does not manage business data for `dquery`, `myfiles`, blogs, picture storage, DNS rules, uploads, or files. Business services store account-system `user.id` as their owner key and manage their own data.
 
+This repository is v2-only. Legacy database schemas, prefixed IDs, and pre-v2 callback-token SSO are intentionally not preserved.
+
 Current production shape:
 
 - Web console: `https://account.js.gripe`
@@ -12,6 +14,7 @@ Current production shape:
 - Database: SQLite
 - Frontend: static HTML/CSS/JS in `public/`
 - Sessions: bearer tokens stored by the web app, with expiration in SQLite
+- Entity IDs: UUIDv7 without legacy prefixes
 - Reverse proxy: OpenResty
 
 ## Roles
@@ -79,6 +82,41 @@ npm test
 ACCOUNT_DB_PATH=/opt/account-system/data/accounts.sqlite3 npm run db:check
 ```
 
+## First Install
+
+The first install is intentionally gated. Old databases can be deleted or rebuilt; v2 does not migrate legacy schemas.
+
+1. Generate the bootstrap token on the server:
+
+```bash
+cd /opt/account-system
+npm run bootstrap:token
+```
+
+The command displays the one-time install token in the terminal and writes `ACCOUNT_BOOTSTRAP_TOKEN_HASH` plus `ACCOUNT_DB_PATH` to `/opt/account-system/config/account-system.env`. Do not copy the displayed token into README, tickets, chat, or logs.
+
+2. Ensure the service reads the generated config file:
+
+```text
+EnvironmentFile=-/opt/account-system/config/account-system.env
+```
+
+3. Start or restart the service, then open:
+
+```text
+https://account.js.gripe/login
+```
+
+4. In the Web UI:
+
+- Enter the bootstrap token shown by the install command.
+- Configure the SQLite database path.
+- Run the database connection test.
+- Confirm the database only after the test succeeds.
+- Create the first `system_admin` with a custom administrator email/display name and password.
+
+Only after the token check and database confirmation does the Web UI allow system administrator creation.
+
 ## API Base
 
 ```text
@@ -94,7 +132,7 @@ curl https://gateway.js.gripe/api/v1/myaccount/healthz
 Public client lookup used by third-party login pages:
 
 ```bash
-curl 'https://gateway.js.gripe/api/v1/myaccount/clients/public?client_id=cli_xxx'
+curl 'https://gateway.js.gripe/api/v1/myaccount/clients/public?client_id=<uuidv7-client-id>'
 ```
 
 This endpoint returns the application name so the login panel can display a human-readable app name instead of exposing the raw client id.
@@ -121,22 +159,23 @@ Recommended:
 After authorization, account-system redirects to:
 
 ```text
-<redirect_uri>?state=<state>&account_session=<token>&token_type=Bearer&expires_at=<iso>&user_id=<usr_id>&scope=<scopes>
+<redirect_uri>?state=<state>&code=<authorization-code>
 ```
 
 The third-party service should:
 
 - verify `state`
-- keep `account_session` server-side or in a short-lived secure app session
-- call `/me` with `Authorization: Bearer <account_session>`
+- exchange `code` server-side by posting `client_id`, `client_secret`, `code`, and `redirect_uri` to `/auth/token`
+- call `/me` with `Authorization: Bearer <accessToken>` only from trusted server-side code
 - store account-system `user.id` as its owner id
-- avoid logging callback query strings
+- issue its own HttpOnly app session cookie
+- avoid logging callback query strings or token exchange payloads
 
-The login UI waits for public client information before allowing the user to continue, so users see the application name rather than the raw client id.
+The redirect URL never contains account sessions, access tokens, or refresh tokens. The login UI waits for public client information before allowing the user to continue, so users see the application name rather than the raw client id.
 
 ### Best Redirect Example: myfiles
 
-`myfiles` is the reference third-party redirect flow because it keeps the unified account token out of browser storage and turns it into a service-owned session cookie.
+`myfiles` is the reference third-party redirect flow because it keeps account-system tokens out of redirect URLs and turns the authorization result into a service-owned session cookie.
 
 Recommended API client:
 
@@ -156,9 +195,9 @@ Implementation notes:
 
 - Start login from the third-party service, not from account-system internals.
 - Store `state` in an HttpOnly, same-site cookie scoped to the callback path.
-- After callback, verify `state`, call `/me` with the returned bearer token, then issue the app's own session cookie.
+- After callback, verify `state`, exchange `code` at `/auth/token`, call `/me` with the returned bearer token from server-side code, then issue the app's own session cookie.
 - Redirect the browser back to the app dashboard and clear the temporary OAuth state cookie.
-- Do not persist `account_session` in localStorage or expose it to app JavaScript.
+- Do not persist account-system access tokens in localStorage or expose them to app JavaScript.
 
 ## Client Management
 
@@ -201,11 +240,20 @@ https://account.js.gripe/login
 
 and create the first `system_admin`.
 
+In v2, startup rebuilds the local SQLite schema if the database is not marked as schema version `2`. This is destructive by design and avoids legacy compatibility paths.
+
+## Verification
+
+The v2 smoke suite exercises setup, login, user creation, client creation/deletion, profile update, password change, and visual rendering with Playwright. It uses a temporary SQLite database and deletes that temporary test data after the run.
+
+![Account-system v2 UI smoke dashboard](public/assets/account-system-v2-ui-smoke-dashboard.png)
+
 ## Security Notes
 
-- Do not log `account_session` callback query strings.
+- Do not log callback query strings, authorization codes, access tokens, refresh tokens, client secrets, or passwords.
 - Use HTTPS redirect URIs only.
 - Third-party apps must validate `state`.
-- API calls use bearer tokens.
+- Third-party apps must exchange authorization codes server-side and issue their own service sessions.
+- API calls use bearer tokens after a successful server-side exchange.
 - Role capabilities are enforced server-side; frontend navigation hiding is only a convenience.
 - The account system is identity infrastructure only; business services remain responsible for their own authorization and data policy.

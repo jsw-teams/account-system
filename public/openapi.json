@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Account.js.gripe Account API",
-    "version": "1.0.0",
-    "description": "Protected account and identity API. Public discovery is allowed; account data access requires authentication."
+    "version": "2.0.0",
+    "description": "JS.Gripe account-system v2 API. It uses UUIDv7 entity IDs and OAuth-style authorization code flow for third-party SSO."
   },
   "servers": [
     {
@@ -21,6 +21,83 @@
         }
       }
     },
+    "/setup/status": {
+      "get": {
+        "summary": "Check whether the account system has an initial administrator",
+        "responses": {
+          "200": {
+            "description": "Setup status"
+          }
+        }
+      }
+    },
+    "/setup/init": {
+      "post": {
+        "summary": "Create the first system administrator",
+        "responses": {
+          "201": {
+            "description": "Created administrator"
+          },
+          "409": {
+            "description": "Already initialized"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Create an Account Center browser session",
+        "responses": {
+          "200": {
+            "description": "Session bearer token for the Account Center UI"
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Register a member account",
+        "responses": {
+          "201": {
+            "description": "Registered user and browser session"
+          }
+        }
+      }
+    },
+    "/auth/authorize": {
+      "post": {
+        "summary": "Issue an authorization code for a registered client redirect",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Callback URL containing code and optional state"
+          },
+          "400": {
+            "description": "Invalid redirect URI or scope"
+          }
+        }
+      }
+    },
+    "/auth/token": {
+      "post": {
+        "summary": "Exchange an authorization code for a bearer token",
+        "responses": {
+          "200": {
+            "description": "Bearer token, expiry, scope, and account user"
+          },
+          "400": {
+            "description": "Invalid or expired authorization code"
+          },
+          "401": {
+            "description": "Bad client credentials"
+          }
+        }
+      }
+    },
     "/clients/public": {
       "get": {
         "summary": "Get public API client metadata",
@@ -29,7 +106,8 @@
             "name": "client_id",
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -43,48 +121,56 @@
         }
       }
     },
-    "/auth/login": {
-      "post": {
-        "summary": "Create a user session",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "email",
-                  "password"
-                ],
-                "properties": {
-                  "email": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "password": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
+    "/clients": {
+      "get": {
+        "summary": "List API clients",
+        "security": [
+          {
+            "bearerAuth": []
           }
-        },
+        ],
         "responses": {
           "200": {
-            "description": "Session bearer token"
+            "description": "Client list"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create an API client",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created client and one-time client secret"
           }
         }
       }
     },
-    "/auth/register": {
-      "post": {
-        "summary": "Register a user when public registration is enabled",
+    "/clients/{clientId}": {
+      "delete": {
+        "summary": "Delete an API client",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
-          "201": {
-            "description": "Registered user and session"
-          },
-          "409": {
-            "description": "Account system is not initialized"
+          "200": {
+            "description": "Deleted client"
           }
         }
       }
@@ -115,28 +201,9 @@
             "bearerAuth": []
           }
         ],
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "providerSubject",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Resolved identity"
-          },
-          "401": {
-            "description": "Unauthorized"
           },
           "404": {
             "description": "Identity not found"

@@ -53,5 +53,8 @@ const result = {
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, JSON.stringify(result, null, 2) + "\n", "utf8");
-console.log(JSON.stringify(result, null, 2));
+console.log(JSON.stringify({
+  ...result,
+  clientSecret: "[redacted]"
+}, null, 2));
 console.log(`[account] saved to ${outputPath}`);

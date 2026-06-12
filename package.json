@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "node --check src/server.mjs && node --check src/store.mjs && node --check scripts/db-check.mjs && node --check scripts/create-myfiles-client.mjs && node --check scripts/create-bootstrap-token.mjs",
+    "build:frontend": "node --check public/app.js",
+    "bootstrap:token": "node scripts/create-bootstrap-token.mjs",
     "start": "node src/server.mjs",
     "sync:cookies": "node /opt/privacy-js-gripe/scripts/sync-to-projects.mjs",
     "db:check": "node scripts/db-check.mjs",

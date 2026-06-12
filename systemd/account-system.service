@@ -12,6 +12,7 @@ Environment=ACCOUNT_PORT=9100
 Environment=ACCOUNT_BASE_PATH=/api/v1/myaccount
 Environment=ACCOUNT_ALLOWED_ORIGIN=https://account.js.gripe
 Environment=ACCOUNT_DB_PATH=/opt/account-system/data/accounts.sqlite3
+EnvironmentFile=-/opt/account-system/config/account-system.env
 ExecStart=/usr/local/bin/npm start
 Restart=always
 RestartSec=3

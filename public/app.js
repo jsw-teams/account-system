@@ -4,6 +4,8 @@ const apiBase = location.hostname === "account.js.gripe"
 
 const state = {
   initialized: false,
+  bootstrap: null,
+  databaseReady: false,
   token: localStorage.getItem("account_token") || "",
   expiresAt: "",
   lang: localStorage.getItem("account_lang") || "zh-CN",
@@ -21,6 +23,15 @@ const i18n = {
     skip: "跳到登录表单",
     skipDashboard: "跳到主内容",
     setupTitle: "创建系统管理员",
+    bootstrapTitle: "核对安装令牌",
+    bootstrapHelp: "在服务器命令行运行 npm run bootstrap:token，输入显示的一次性安装令牌后继续。",
+    bootstrapToken: "安装令牌",
+    verifyBootstrap: "核对令牌",
+    databaseTitle: "配置数据库连接",
+    databaseHelp: "确认 SQLite 数据库路径。v2 初始化会直接重建非 v2 旧库。",
+    databasePath: "数据库路径",
+    testDatabase: "测试连接",
+    applyDatabase: "确认数据库",
     loginTitle: "登录账户中心",
     registerTitle: "注册统一账户",
     email: "邮箱",
@@ -47,6 +58,9 @@ const i18n = {
     confirmDashboard: "当前已登录 {email}。确认后进入账户中心，或切换为其他账户。",
     passwordMismatch: "两次密码不一致",
     adminCreated: "系统管理员已创建",
+    bootstrapVerified: "安装令牌已核对",
+    databaseOk: "数据库连接测试成功：{path}",
+    databaseApplied: "数据库连接已确认",
     accountCreated: "账户已创建",
     userManagement: "用户管理",
     apiAccess: "API 接入",
@@ -60,6 +74,15 @@ const i18n = {
     skip: "Skip to sign-in form",
     skipDashboard: "Skip to main content",
     setupTitle: "Create system administrator",
+    bootstrapTitle: "Verify install token",
+    bootstrapHelp: "Run npm run bootstrap:token on the server, then enter the displayed one-time install token.",
+    bootstrapToken: "Install token",
+    verifyBootstrap: "Verify token",
+    databaseTitle: "Configure database",
+    databaseHelp: "Confirm the SQLite database path. v2 setup rebuilds non-v2 old databases.",
+    databasePath: "Database path",
+    testDatabase: "Test connection",
+    applyDatabase: "Confirm database",
     loginTitle: "Sign in to Account Center",
     registerTitle: "Create unified account",
     email: "Email",
@@ -86,6 +109,9 @@ const i18n = {
     confirmDashboard: "You are signed in as {email}. Continue to Account Center, or switch accounts.",
     passwordMismatch: "The two passwords do not match",
     adminCreated: "System administrator created",
+    bootstrapVerified: "Install token verified",
+    databaseOk: "Database connection test passed: {path}",
+    databaseApplied: "Database connection confirmed",
     accountCreated: "Account created",
     userManagement: "User management",
     apiAccess: "API access",
@@ -171,9 +197,13 @@ async function bootLogin() {
   const auth = authRequest();
   const status = await request("/setup/status", { auth: false });
   state.initialized = status.initialized;
-  $("#setup-form").classList.toggle("hidden", state.initialized);
-  $("#login-form").classList.toggle("hidden", !state.initialized);
+  state.bootstrap = status.bootstrap || { required: false, verified: true, dbPath: "" };
+  state.databaseReady = Boolean(state.initialized);
+  renderSetupStage();
 
+  $("#bootstrap-form")?.addEventListener("submit", verifyBootstrap);
+  $("#database-form")?.addEventListener("submit", applyDatabase);
+  $("#test-database")?.addEventListener("click", testDatabase);
   $("#setup-form").addEventListener("submit", setupFirstAdmin);
   $("#login-form").addEventListener("submit", login);
   $("#register-form")?.addEventListener("submit", register);
@@ -225,12 +255,68 @@ async function setupFirstAdmin(event) {
         password
       }
     });
+    state.initialized = true;
     $("#setup-form").classList.add("hidden");
     $("#login-form").classList.remove("hidden");
     $("#setup-error").textContent = "";
     toast(t("adminCreated"));
   } catch (error) {
     $("#setup-error").textContent = error.message;
+  }
+}
+
+async function verifyBootstrap(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    const result = await request("/setup/bootstrap/verify", {
+      method: "POST",
+      auth: false,
+      body: { token: form.get("token") }
+    });
+    state.bootstrap = result.bootstrap;
+    $("#bootstrap-error").textContent = "";
+    toast(t("bootstrapVerified"));
+    renderSetupStage();
+  } catch (error) {
+    $("#bootstrap-error").textContent = error.message;
+  }
+}
+
+async function testDatabase() {
+  const form = new FormData($("#database-form"));
+  try {
+    const result = await request("/setup/database/test", {
+      method: "POST",
+      auth: false,
+      body: { dbPath: form.get("dbPath") }
+    });
+    $("#database-error").textContent = "";
+    $("#database-result").textContent = t("databaseOk").replace("{path}", result.dbPath);
+  } catch (error) {
+    $("#database-result").textContent = "";
+    $("#database-error").textContent = error.message;
+  }
+}
+
+async function applyDatabase(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    const result = await request("/setup/database/apply", {
+      method: "POST",
+      auth: false,
+      body: { dbPath: form.get("dbPath") }
+    });
+    state.bootstrap = result.bootstrap;
+    state.initialized = result.initialized;
+    state.databaseReady = true;
+    $("#database-error").textContent = "";
+    toast(t("databaseApplied"));
+    renderSetupStage();
+  } catch (error) {
+    $("#database-result").textContent = "";
+    $("#database-error").textContent = error.message;
   }
 }
 
@@ -563,10 +649,10 @@ async function deleteUser(event) {
 }
 
 async function renderClients() {
-  const { apis } = await request("/apis");
-  state.clients = apis;
+  const { clients } = await request("/clients");
+  state.clients = clients;
 
-  $("#clients-grid").innerHTML = apis.map((client) => {
+  $("#clients-grid").innerHTML = clients.map((client) => {
     const redirectUris = Array.isArray(client.redirectUris) ? client.redirectUris : [];
     const scopes = Array.isArray(client.scopes) ? client.scopes : [];
 
@@ -641,7 +727,7 @@ async function createClient(event) {
   const formElement = event.currentTarget;
   const form = new FormData(formElement);
 
-  const result = await request("/apis", {
+  const result = await request("/clients", {
     method: "POST",
     body: {
       name: form.get("name"),
@@ -650,7 +736,7 @@ async function createClient(event) {
     }
   });
 
-  const api = result.api || result.client;
+  const api = result.client;
 
   closeDialog("#client-dialog");
   formElement.reset();
@@ -666,7 +752,7 @@ async function createClient(event) {
 }
 
 async function deleteApi(apiId) {
-  await request(`/apis/${encodeURIComponent(apiId)}`, { method: "DELETE" });
+  await request(`/clients/${encodeURIComponent(apiId)}`, { method: "DELETE" });
   toast("API 接入凭据已删除");
   await renderClients();
 }
@@ -869,11 +955,37 @@ function toast(message) {
 
 function showAuthForm(name) {
   $("#session-confirm")?.classList.add("hidden");
+  $("#bootstrap-form")?.classList.add("hidden");
+  $("#database-form")?.classList.add("hidden");
+  $("#setup-form")?.classList.add("hidden");
   $("#login-form")?.classList.toggle("hidden", name !== "login");
   $("#register-form")?.classList.toggle("hidden", name !== "register");
 }
 
+function renderSetupStage() {
+  if (!isLoginPage) return;
+  const bootstrapOk = !state.bootstrap?.required || state.bootstrap?.verified;
+  const showBootstrap = !state.initialized && !bootstrapOk;
+  const showDatabase = !state.initialized && bootstrapOk && !state.databaseReady;
+  const showSetup = !state.initialized && bootstrapOk && state.databaseReady;
+  const showLogin = state.initialized;
+
+  $("#bootstrap-form")?.classList.toggle("hidden", !showBootstrap);
+  $("#database-form")?.classList.toggle("hidden", !showDatabase);
+  $("#setup-form")?.classList.toggle("hidden", !showSetup);
+  $("#login-form")?.classList.toggle("hidden", !showLogin);
+  $("#register-form")?.classList.add("hidden");
+  $("#session-confirm")?.classList.add("hidden");
+
+  const dbInput = $("#database-form input[name='dbPath']");
+  if (dbInput && !dbInput.value) {
+    dbInput.value = state.bootstrap?.dbPath || "/opt/account-system/data/accounts.sqlite3";
+  }
+}
+
 function showSessionConfirm() {
+  $("#bootstrap-form")?.classList.add("hidden");
+  $("#database-form")?.classList.add("hidden");
   $("#setup-form")?.classList.add("hidden");
   $("#login-form")?.classList.add("hidden");
   $("#register-form")?.classList.add("hidden");

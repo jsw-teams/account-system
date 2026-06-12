@@ -4,8 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
+const authCodeTtlMs = 1000 * 60 * 5;
 const roles = new Set(["system_admin", "operator", "auditor", "member"]);
 const supportEmail = "helper@js.gripe";
+const schemaVersion = "2";
 
 export class AccountStore {
   constructor(filePath) {
@@ -14,9 +16,43 @@ export class AccountStore {
 
   async load() {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+    if (!this.hasV2Schema()) {
+      this.rebuildV2Schema();
+      return;
+    }
+    this.exec("PRAGMA foreign_keys = ON;");
+  }
+
+  hasV2Schema() {
+    const metaExists = this.queryOne(`
+      SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'
+    `);
+    if (!metaExists) {
+      return false;
+    }
+    const row = this.queryOne("SELECT value FROM schema_meta WHERE key = 'schema_version'");
+    return row?.value === schemaVersion;
+  }
+
+  rebuildV2Schema() {
     this.exec(`
       PRAGMA journal_mode = WAL;
+      PRAGMA foreign_keys = OFF;
+
+      DROP TABLE IF EXISTS audit_logs;
+      DROP TABLE IF EXISTS auth_codes;
+      DROP TABLE IF EXISTS sessions;
+      DROP TABLE IF EXISTS clients;
+      DROP TABLE IF EXISTS identities;
+      DROP TABLE IF EXISTS users;
+      DROP TABLE IF EXISTS schema_meta;
+
       PRAGMA foreign_keys = ON;
+
+      CREATE TABLE schema_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -62,6 +98,18 @@ export class AccountStore {
         expires_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS auth_codes (
+        code_hash TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        redirect_uri TEXT NOT NULL,
+        scopes_json TEXT NOT NULL DEFAULT '[]',
+        state TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS audit_logs (
         id TEXT PRIMARY KEY,
         actor_user_id TEXT,
@@ -71,6 +119,8 @@ export class AccountStore {
         detail_json TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL
       );
+
+      INSERT INTO schema_meta (key, value) VALUES ('schema_version', '${schemaVersion}');
     `);
   }
 
@@ -91,7 +141,7 @@ export class AccountStore {
     validatePassword(password);
     const now = new Date().toISOString();
     const passwordRecord = hashPassword(password);
-    const userId = `usr_${crypto.randomUUID()}`;
+    const userId = uuidv7();
     this.exec(`
       INSERT INTO users (
         id, email, password_hash, password_salt, display_name, status, role,
@@ -125,7 +175,7 @@ export class AccountStore {
     const passwordRecord = hashPassword(password);
     const now = new Date().toISOString();
     const user = {
-      id: `usr_${crypto.randomUUID()}`,
+      id: uuidv7(),
       email,
       display_name: String(input.displayName || email.split("@")[0]).trim(),
       status: input.status === "disabled" ? "disabled" : "active",
@@ -371,7 +421,7 @@ export class AccountStore {
 
     const now = new Date().toISOString();
     const identity = {
-      id: `idn_${crypto.randomUUID()}`,
+      id: uuidv7(),
       user_id: userId,
       provider,
       provider_subject: providerSubject,
@@ -481,7 +531,7 @@ export class AccountStore {
     const secret = crypto.randomBytes(32).toString("base64url");
     const now = new Date().toISOString();
     const client = {
-      id: `cli_${crypto.randomUUID()}`,
+      id: uuidv7(),
       name,
       secret_hash: hashSecret(secret),
       redirect_uris_json: JSON.stringify(Array.isArray(input.redirectUris) ? input.redirectUris.map(String) : []),
@@ -524,7 +574,7 @@ export class AccountStore {
     return client ? publicClient(client) : null;
   }
 
-  authorizeClientSession(input, sessionToken, user) {
+  authorizeClientSession(input, user) {
     const client = this.getClient(input.clientId || input.client_id);
     if (!client) {
       throw httpError(404, "api client not found", "client_not_found");
@@ -545,15 +595,25 @@ export class AccountStore {
       throw httpError(400, `scope is not allowed: ${deniedScope}`, "invalid_scope", { scope: deniedScope });
     }
 
+    const code = crypto.randomBytes(32).toString("base64url");
+    const now = new Date();
+    const expires = new Date(now.getTime() + authCodeTtlMs);
+
+    this.exec(`
+      INSERT INTO auth_codes (
+        code_hash, client_id, user_id, redirect_uri, scopes_json, state, created_at, expires_at, used_at
+      ) VALUES (
+        ${sql(hashSecret(code))}, ${sql(client.id)}, ${sql(user.id)}, ${sql(redirectUri)},
+        ${sql(JSON.stringify(requestedScopes))}, ${sql(String(input.state || ""))},
+        ${sql(now.toISOString())}, ${sql(expires.toISOString())}, NULL
+      );
+    `);
+
     const callbackUrl = parsedRedirectUri;
     if (input.state) {
       callbackUrl.searchParams.set("state", String(input.state));
     }
-    callbackUrl.searchParams.set("account_session", sessionToken);
-    callbackUrl.searchParams.set("token_type", "Bearer");
-    callbackUrl.searchParams.set("expires_at", String(input.expiresAt || ""));
-    callbackUrl.searchParams.set("user_id", user.id);
-    callbackUrl.searchParams.set("scope", requestedScopes.join(" "));
+    callbackUrl.searchParams.set("code", code);
 
     this.audit(user.id, "auth.authorize", "api", client.id, {
       redirectUri,
@@ -564,10 +624,76 @@ export class AccountStore {
       callbackUrl: callbackUrl.toString(),
       client,
       user,
-      tokenType: "Bearer",
-      accountSession: sessionToken,
-      expiresAt: String(input.expiresAt || ""),
+      codeExpiresAt: expires.toISOString(),
       scopes: requestedScopes
+    };
+  }
+
+  exchangeAuthorizationCode(input) {
+    const client = this.verifyClient(input.clientId || input.client_id, input.clientSecret || input.client_secret);
+    if (!client) {
+      throw httpError(401, "bad client credentials", "bad_client_credentials");
+    }
+
+    const code = String(input.code || "").trim();
+    const codeHash = hashSecret(code);
+    const now = new Date();
+    const row = this.queryOne(`
+      SELECT auth_codes.*, users.email, users.display_name, users.status, users.role,
+             users.must_change_password, users.metadata_json, users.created_at AS user_created_at,
+             users.updated_at AS user_updated_at
+      FROM auth_codes
+      JOIN users ON users.id = auth_codes.user_id
+      WHERE auth_codes.code_hash = ${sql(codeHash)}
+        AND auth_codes.client_id = ${sql(client.id)}
+        AND auth_codes.used_at IS NULL
+        AND auth_codes.expires_at > ${sql(now.toISOString())}
+    `);
+    if (!row) {
+      throw httpError(400, "authorization code is invalid or expired", "invalid_grant");
+    }
+
+    const redirectUri = String(input.redirectUri || input.redirect_uri || "").trim();
+    if (redirectUri !== row.redirect_uri) {
+      throw httpError(400, "redirect_uri does not match authorization request", "invalid_grant");
+    }
+    if (row.status !== "active") {
+      throw accountDisabledError({
+        status: row.status,
+        metadata_json: row.metadata_json
+      });
+    }
+
+    const token = crypto.randomBytes(32).toString("base64url");
+    const expires = new Date(now.getTime() + sessionTtlMs);
+    this.exec(`
+      UPDATE auth_codes
+      SET used_at = ${sql(now.toISOString())}
+      WHERE code_hash = ${sql(codeHash)};
+      INSERT INTO sessions (token_hash, user_id, created_at, last_seen_at, expires_at)
+      VALUES (${sql(hashSecret(token))}, ${sql(row.user_id)}, ${sql(now.toISOString())}, ${sql(now.toISOString())}, ${sql(expires.toISOString())});
+    `);
+    this.audit(row.user_id, "auth.token_exchange", "api", client.id, {
+      redirectUri,
+      scopes: parseJson(row.scopes_json, [])
+    });
+
+    return {
+      accessToken: token,
+      tokenType: "Bearer",
+      expiresAt: expires.toISOString(),
+      scope: parseJson(row.scopes_json, []).join(" "),
+      user: publicUser({
+        id: row.user_id,
+        email: row.email,
+        display_name: row.display_name,
+        status: row.status,
+        role: row.role,
+        must_change_password: row.must_change_password,
+        metadata_json: row.metadata_json,
+        created_at: row.user_created_at,
+        updated_at: row.user_updated_at
+      })
     };
   }
 
@@ -666,7 +792,7 @@ export class AccountStore {
     this.exec(`
       INSERT INTO audit_logs (id, actor_user_id, action, target_type, target_id, detail_json, created_at)
       VALUES (
-        ${sql(`aud_${crypto.randomUUID()}`)}, ${sql(actorUserId)}, ${sql(action)},
+        ${sql(uuidv7())}, ${sql(actorUserId)}, ${sql(action)},
         ${sql(targetType)}, ${sql(targetId)}, ${sql(JSON.stringify(detail || {}))}, ${sql(now)}
       );
     `);
@@ -677,12 +803,18 @@ export class AccountStore {
   }
 
   query(statement) {
-    const output = execFileSync("sqlite3", ["-json", this.filePath, statement], { encoding: "utf8" }).trim();
+    const output = execFileSync("sqlite3", ["-json", this.filePath, statement], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    }).trim();
     return output ? JSON.parse(output) : [];
   }
 
   exec(statement) {
-    execFileSync("sqlite3", [this.filePath, statement], { encoding: "utf8" });
+    execFileSync("sqlite3", [this.filePath, statement], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
   }
 }
 
@@ -810,6 +942,21 @@ function validatePassword(password) {
 
 function generatePassword() {
   return `${crypto.randomBytes(12).toString("base64url")}A1!`;
+}
+
+function uuidv7() {
+  const bytes = crypto.randomBytes(16);
+  const ms = BigInt(Date.now());
+  bytes[0] = Number((ms >> 40n) & 0xffn);
+  bytes[1] = Number((ms >> 32n) & 0xffn);
+  bytes[2] = Number((ms >> 24n) & 0xffn);
+  bytes[3] = Number((ms >> 16n) & 0xffn);
+  bytes[4] = Number((ms >> 8n) & 0xffn);
+  bytes[5] = Number(ms & 0xffn);
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function isPlainObject(value) {

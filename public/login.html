@@ -29,6 +29,28 @@
           <button type="button" class="ghost compact-action" data-lang="en">English</button>
         </div>
         <div id="authorize-context" class="auth-context hidden" role="status"></div>
+        <form id="bootstrap-form" class="auth-panel hidden" aria-describedby="bootstrap-error">
+          <p class="kicker">Install</p>
+          <h2 data-i18n="bootstrapTitle">核对安装令牌</h2>
+          <p class="meta" data-i18n="bootstrapHelp">在服务器命令行运行 npm run bootstrap:token，输入显示的一次性安装令牌后继续。</p>
+          <label><span data-i18n="bootstrapToken">安装令牌</span><input name="token" type="password" autocomplete="one-time-code" required></label>
+          <button type="submit" data-i18n="verifyBootstrap">核对令牌</button>
+          <p id="bootstrap-error" class="form-error" role="alert"></p>
+        </form>
+
+        <form id="database-form" class="auth-panel hidden" aria-describedby="database-error">
+          <p class="kicker">Database</p>
+          <h2 data-i18n="databaseTitle">配置数据库连接</h2>
+          <p class="meta" data-i18n="databaseHelp">确认 SQLite 数据库路径。v2 初始化会直接重建非 v2 旧库。</p>
+          <label><span data-i18n="databasePath">数据库路径</span><input name="dbPath" autocomplete="off" required></label>
+          <div class="split-actions">
+            <button type="button" class="ghost" id="test-database" data-i18n="testDatabase">测试连接</button>
+            <button type="submit" data-i18n="applyDatabase">确认数据库</button>
+          </div>
+          <p id="database-result" class="form-note" role="status"></p>
+          <p id="database-error" class="form-error" role="alert"></p>
+        </form>
+
         <section id="session-confirm" class="auth-panel session-confirm hidden" aria-labelledby="session-confirm-title">
           <p class="kicker">Confirm</p>
           <h2 id="session-confirm-title" data-i18n="confirmTitle">确认账户</h2>

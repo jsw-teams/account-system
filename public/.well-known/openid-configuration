@@ -1,7 +1,7 @@
 {
   "issuer": "https://account.js.gripe/",
   "authorization_endpoint": "https://account.js.gripe/login",
-  "token_endpoint": "https://gateway.js.gripe/api/v1/myaccount/auth/login",
+  "token_endpoint": "https://gateway.js.gripe/api/v1/myaccount/auth/token",
   "userinfo_endpoint": "https://gateway.js.gripe/api/v1/myaccount/me",
   "jwks_uri": "https://account.js.gripe/.well-known/jwks.json",
   "response_types_supported": [
@@ -14,8 +14,7 @@
     "RS256"
   ],
   "grant_types_supported": [
-    "authorization_code",
-    "client_credentials"
+    "authorization_code"
   ],
   "scopes_supported": [
     "accounts:read",

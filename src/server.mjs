@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import http from "node:http";
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AccountStore } from "./store.mjs";
 
 const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const configPath = process.env.ACCOUNT_CONFIG_PATH || path.join(rootDir, "config", "account-system.env");
 const dataPath = process.env.ACCOUNT_DB_PATH || path.join(rootDir, "data", "accounts.sqlite3");
 const publicDir = process.env.ACCOUNT_PUBLIC_DIR || path.join(rootDir, "public");
 const host = process.env.ACCOUNT_HOST || "127.0.0.1";
 const port = Number(process.env.ACCOUNT_PORT || 9100);
 const basePath = normalizeBasePath(process.env.ACCOUNT_BASE_PATH || "/api/v1/myaccount");
 const allowedOrigin = process.env.ACCOUNT_ALLOWED_ORIGIN || "https://account.js.gripe";
+const bootstrapTokenHash = process.env.ACCOUNT_BOOTSTRAP_TOKEN_HASH || "";
 
-const store = new AccountStore(dataPath);
+let store = new AccountStore(dataPath);
 await store.load();
+let bootstrapVerified = false;
+let configuredDbPath = dataPath;
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -37,11 +42,57 @@ const server = http.createServer(async (req, res) => {
     const routePath = url.pathname.slice(basePath.length) || "/";
 
     if (req.method === "GET" && routePath === "/setup/status") {
-      sendJson(req, res, 200, { initialized: store.isInitialized() });
+      sendJson(req, res, 200, {
+        initialized: store.isInitialized(),
+        bootstrap: bootstrapStatus()
+      });
+      return;
+    }
+
+    if (req.method === "POST" && routePath === "/setup/bootstrap/verify") {
+      const body = await readJson(req);
+      if (!bootstrapTokenHash) {
+        sendJson(req, res, 503, { error: "bootstrap token is not configured; run npm run bootstrap:token on the server", code: "bootstrap_not_configured", detail: {} });
+        return;
+      }
+      if (!verifyBootstrapToken(body.token)) {
+        sendJson(req, res, 401, { error: "bootstrap token is invalid", code: "bad_bootstrap_token", detail: {} });
+        return;
+      }
+      bootstrapVerified = true;
+      sendJson(req, res, 200, { ok: true, bootstrap: bootstrapStatus() });
+      return;
+    }
+
+    if (req.method === "POST" && routePath === "/setup/database/test") {
+      requireBootstrap();
+      const result = await testDatabasePath((await readJson(req)).dbPath);
+      sendJson(req, res, 200, result);
+      return;
+    }
+
+    if (req.method === "POST" && routePath === "/setup/database/apply") {
+      requireBootstrap();
+      const body = await readJson(req);
+      const result = await testDatabasePath(body.dbPath);
+      const nextStore = new AccountStore(result.dbPath);
+      await nextStore.load();
+      store = nextStore;
+      configuredDbPath = result.dbPath;
+      await writeServiceConfig({
+        ACCOUNT_DB_PATH: configuredDbPath,
+        ACCOUNT_BOOTSTRAP_TOKEN_HASH: bootstrapTokenHash
+      });
+      sendJson(req, res, 200, {
+        ...result,
+        bootstrap: bootstrapStatus(),
+        initialized: store.isInitialized()
+      });
       return;
     }
 
     if (req.method === "POST" && routePath === "/setup/init") {
+      requireBootstrap();
       sendJson(req, res, 201, { user: await store.setupFirstAdmin(await readJson(req)) });
       return;
     }
@@ -82,6 +133,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "POST" && routePath === "/auth/token") {
+      sendJson(req, res, 200, store.exchangeAuthorizationCode(await readJson(req)));
+      return;
+    }
+
     const session = requireSession(req);
 
     if (req.method === "POST" && routePath === "/auth/logout") {
@@ -91,11 +147,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && routePath === "/auth/authorize") {
-      const token = getBearerToken(req);
       sendJson(req, res, 200, store.authorizeClientSession({
         ...(await readJson(req)),
         expiresAt: session.expiresAt
-      }, token, session.user));
+      }, session.user));
       return;
     }
 
@@ -191,32 +246,32 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "GET" && (routePath === "/clients" || routePath === "/apis")) {
+    if (req.method === "GET" && routePath === "/clients") {
       requireCapability(session, "clients");
-      const apis = store.listClients();
-      sendJson(req, res, 200, { apis, clients: apis });
+      const clients = store.listClients();
+      sendJson(req, res, 200, { clients });
       return;
     }
 
-    if (req.method === "POST" && (routePath === "/clients" || routePath === "/apis")) {
+    if (req.method === "POST" && routePath === "/clients") {
       requireCapability(session, "clients");
-      const api = await store.createClient(await readJson(req), session.user.id);
-      sendJson(req, res, 201, { api, client: api });
+      const client = await store.createClient(await readJson(req), session.user.id);
+      sendJson(req, res, 201, { client });
       return;
     }
 
-    const apiMatch = routePath.match(/^\/(?:clients|apis)\/([^/]+)$/);
+    const apiMatch = routePath.match(/^\/clients\/([^/]+)$/);
     if (req.method === "DELETE" && apiMatch) {
       requireCapability(session, "clients");
-      const api = await store.deleteClient(apiMatch[1], session.user.id);
-      sendJson(req, res, 200, { api, client: api });
+      const client = await store.deleteClient(apiMatch[1], session.user.id);
+      sendJson(req, res, 200, { client });
       return;
     }
 
-    if (req.method === "POST" && (routePath === "/clients/verify" || routePath === "/apis/verify")) {
+    if (req.method === "POST" && routePath === "/clients/verify") {
       const body = await readJson(req);
       const client = store.verifyClient(body.clientId, body.clientSecret);
-      sendJson(req, res, client ? 200 : 401, client ? { api: client, client } : { error: "bad api credentials", code: "bad_api_credentials", detail: {} });
+      sendJson(req, res, client ? 200 : 401, client ? { client } : { error: "bad api credentials", code: "bad_api_credentials", detail: {} });
       return;
     }
 
@@ -258,6 +313,86 @@ function requireCapability(session, capability) {
     error.code = "permission_denied";
     throw error;
   }
+}
+
+function requireBootstrap() {
+  if (store.isInitialized()) {
+    return;
+  }
+  if (!bootstrapVerified) {
+    const error = new Error("bootstrap token verification is required");
+    error.statusCode = 403;
+    error.code = "bootstrap_required";
+    throw error;
+  }
+}
+
+function verifyBootstrapToken(token) {
+  if (!bootstrapTokenHash) {
+    return false;
+  }
+  const actual = Buffer.from(hashSecret(String(token || "")));
+  const expected = Buffer.from(bootstrapTokenHash);
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+function bootstrapStatus() {
+  const initialized = store.isInitialized();
+  return {
+    required: !initialized,
+    configured: Boolean(bootstrapTokenHash),
+    verified: initialized || bootstrapVerified,
+    dbPath: configuredDbPath
+  };
+}
+
+async function testDatabasePath(inputPath) {
+  const dbPath = normalizeDbPath(inputPath);
+  await fs.mkdir(path.dirname(dbPath), { recursive: true });
+  const probe = new AccountStore(dbPath);
+  await probe.load();
+  return {
+    ok: true,
+    dbPath,
+    initialized: probe.isInitialized()
+  };
+}
+
+function normalizeDbPath(inputPath) {
+  const raw = String(inputPath || configuredDbPath || dataPath).trim();
+  if (!raw) {
+    const error = new Error("database path is required");
+    error.statusCode = 400;
+    error.code = "db_path_required";
+    throw error;
+  }
+  return path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(rootDir, raw);
+}
+
+async function writeServiceConfig(values) {
+  await fs.mkdir(path.dirname(configPath), { recursive: true });
+  let existing = "";
+  try {
+    existing = await fs.readFile(configPath, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+
+  const lines = existing
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !Object.keys(values).some((key) => line.startsWith(`${key}=`)));
+  for (const [key, value] of Object.entries(values)) {
+    if (value) lines.push(`${key}=${quoteEnv(value)}`);
+  }
+  await fs.writeFile(configPath, `${lines.join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
+}
+
+function quoteEnv(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function hashSecret(secret) {
+  return crypto.createHash("sha256").update(secret).digest("hex");
 }
 
 function getBearerToken(req) {
